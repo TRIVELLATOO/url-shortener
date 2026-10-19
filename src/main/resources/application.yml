@@ -25,3 +25,7 @@ spring:
 
 server:
   port: ${SERVER_PORT:8080}
+
+app:
+  # Endereço público usado para montar a URL curta devolvida pela API.
+  base-url: ${APP_BASE_URL:http://localhost:8080}
