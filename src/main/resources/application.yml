@@ -1,0 +1,27 @@
+spring:
+  application:
+    name: shortener
+
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:shortener}
+    username: ${DB_USER:shortener}
+    password: ${DB_PASSWORD:shortener}
+
+  jpa:
+    # O schema é responsabilidade do Flyway; o Hibernate só confere se as entidades batem com o banco.
+    hibernate:
+      ddl-auto: validate
+    # Evita manter a conexão com o banco aberta durante toda a requisição HTTP.
+    open-in-view: false
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+server:
+  port: ${SERVER_PORT:8080}
