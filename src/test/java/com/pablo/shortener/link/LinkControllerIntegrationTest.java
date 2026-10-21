@@ -9,18 +9,24 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.jayway.jsonpath.JsonPath;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Sobe a aplicação inteira e conversa com o Postgres do Docker Compose.
- * O @Transactional desfaz (rollback) tudo o que cada teste gravou, mantendo o banco limpo.
+ * Sobe a aplicação inteira e conversa com o Postgres e o Redis do Docker Compose.
+ * O @Transactional desfaz (rollback) tudo o que cada teste gravou no Postgres.
+ * O Redis fica fora da transação, então as chaves criadas são apagadas no @AfterEach.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -32,6 +38,16 @@ class LinkControllerIntegrationTest {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private StringRedisTemplate redis;
+
+    private final List<String> createdCodes = new ArrayList<>();
+
+    @AfterEach
+    void limparCache() {
+        createdCodes.forEach(code -> redis.delete(LinkCache.key(code)));
+    }
 
     @Test
     void criaLinkCurto() throws Exception {
@@ -48,6 +64,7 @@ class LinkControllerIntegrationTest {
 
     @Test
     void redirecionaERegistraOClique() throws Exception {
+        // O 1º acesso é um cache MISS e o 2º é um HIT: os dois cliques precisam ser contados.
         String code = criarLink("https://www.example.com/destino");
 
         mockMvc.perform(get("/" + code))
@@ -62,6 +79,31 @@ class LinkControllerIntegrationTest {
                 "select count(*) from clicks c join links l on l.id = c.link_id where l.code = ?", Integer.class, code);
         assertThat(clickCount).isEqualTo(2);
         assertThat(clicks).isEqualTo(2);
+    }
+
+    @Test
+    void primeiroAcessoGuardaOLinkNoCacheComTtlDe24h() throws Exception {
+        String code = criarLink("https://www.example.com/cache");
+        assertThat(redis.hasKey(LinkCache.key(code))).isFalse(); // cache-aside: criar não preenche o cache
+
+        mockMvc.perform(get("/" + code)).andExpect(status().isFound());
+
+        assertThat(redis.opsForValue().get(LinkCache.key(code))).contains("https://www.example.com/cache");
+        Long ttlSeconds = redis.getExpire(LinkCache.key(code));
+        assertThat(ttlSeconds).isBetween(Duration.ofHours(24).minusMinutes(1).toSeconds(), Duration.ofHours(24).toSeconds());
+    }
+
+    @Test
+    void segundoAcessoVemDoCacheENaoDoBanco() throws Exception {
+        String code = criarLink("https://www.example.com/original");
+        mockMvc.perform(get("/" + code)).andExpect(status().isFound()); // MISS: vai ao banco e guarda no Redis
+
+        // Muda a URL direto no banco. Se o 2º acesso ainda devolver a antiga, quem respondeu foi o Redis.
+        jdbcTemplate.update("update links set original_url = ? where code = ?", "https://www.example.com/alterada", code);
+
+        mockMvc.perform(get("/" + code))
+                .andExpect(status().isFound())
+                .andExpect(header().string("Location", "https://www.example.com/original"));
     }
 
     @Test
@@ -122,6 +164,8 @@ class LinkControllerIntegrationTest {
                         .content("{\"url\": \"" + url + "\"}"))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
-        return JsonPath.read(body, "$.code");
+        String code = JsonPath.read(body, "$.code");
+        createdCodes.add(code);
+        return code;
     }
 }

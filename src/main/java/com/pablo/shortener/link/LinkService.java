@@ -5,11 +5,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-@RequiredArgsConstructor // o Lombok gera o construtor; o Spring injeta os repositórios por ele
+@RequiredArgsConstructor // o Lombok gera o construtor; o Spring injeta as dependências por ele
 public class LinkService {
 
     private final LinkRepository linkRepository;
     private final ClickRepository clickRepository;
+    private final LinkCache linkCache;
 
     /**
      * Insere o link sem código, usa o id gerado pelo banco para calcular o código Base62
@@ -24,13 +25,26 @@ public class LinkService {
         return link;
     }
 
-    /** Busca a URL original pelo código e registra o clique. */
+    /**
+     * Busca a URL original pelo código (primeiro no cache, depois no banco) e registra o clique.
+     * O cache evita o SELECT; o INSERT do clique e o UPDATE do contador continuam acontecendo.
+     */
     @Transactional
     public String resolve(String code) {
+        CachedLink link = linkCache.get(code).orElseGet(() -> loadAndCache(code));
+
+        // getReferenceById não vai ao banco: cria uma "referência" ao link só com o id.
+        clickRepository.save(new Click(linkRepository.getReferenceById(link.id())));
+        linkRepository.incrementClickCount(link.id());
+        return link.originalUrl();
+    }
+
+    // Cache miss: busca no banco e guarda no Redis para os próximos acessos.
+    private CachedLink loadAndCache(String code) {
         Link link = linkRepository.findByCode(code)
                 .orElseThrow(() -> new LinkNotFoundException(code));
-        clickRepository.save(new Click(link));
-        linkRepository.incrementClickCount(link.getId());
-        return link.getOriginalUrl();
+        CachedLink cached = new CachedLink(link.getId(), link.getOriginalUrl());
+        linkCache.put(code, cached);
+        return cached;
     }
 }

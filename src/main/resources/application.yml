@@ -22,6 +22,9 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+      # Timeout curto: se o Redis travar, a requisição não fica esperando segundos.
+      timeout: ${REDIS_TIMEOUT:500ms}
+      connect-timeout: ${REDIS_TIMEOUT:500ms}
 
 server:
   port: ${SERVER_PORT:8080}
@@ -29,3 +32,12 @@ server:
 app:
   # Endereço público usado para montar a URL curta devolvida pela API.
   base-url: ${APP_BASE_URL:http://localhost:8080}
+  cache:
+    # Por quanto tempo um link fica guardado no Redis (ex.: 24h, 30m, 30s).
+    link-ttl: ${LINK_CACHE_TTL:24h}
+
+logging:
+  level:
+    # Use "debug" para ver no log o SQL executado e os HIT/MISS do cache.
+    org.hibernate.SQL: ${SQL_LOG_LEVEL:info}
+    com.pablo.shortener.link.LinkCache: ${CACHE_LOG_LEVEL:info}
