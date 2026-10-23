@@ -12,6 +12,7 @@ Projeto de portfólio, construído em etapas, com foco em decisões técnicas ex
 - **Estatísticas:** total de cliques e cliques por dia nos últimos 7 dias, incluindo os dias sem clique, com 0.
 - **Rate limit:** 10 criações de link por minuto por IP. Acima disso, a resposta é `429` com `Retry-After`.
 - **Página web** para encurtar pelo navegador, com botão de copiar.
+- **Página de estatísticas** (`/stats.html?code=...`) com o total de cliques e um gráfico de barras dos últimos 7 dias, em HTML, CSS e JavaScript puros.
 - **Documentação interativa** com Swagger (springdoc-openapi).
 - **Erros padronizados** no formato ProblemDetail ([RFC 9457](https://www.rfc-editor.org/rfc/rfc9457)).
 
@@ -69,6 +70,7 @@ docker compose up -d --wait
 
 Depois, abra:
 - **Página web:** http://localhost:8080
+- **Estatísticas de um link:** http://localhost:8080/stats.html?code=SEU_CODIGO (ou clique em "Ver estatísticas" depois de encurtar)
 - **Swagger UI:** http://localhost:8080/swagger-ui.html
 - **OpenAPI (JSON):** http://localhost:8080/v3/api-docs
 
@@ -236,5 +238,7 @@ src/main/java/com/pablo/shortener/
 src/main/resources/
 ├── application.yml                 # configuração (com variáveis de ambiente)
 ├── db/migration/V1__init.sql       # schema (Flyway)
-└── static/index.html               # página web
+└── static/
+    ├── index.html                  # página para encurtar links
+    └── stats.html                  # página de estatísticas com gráfico
 ```

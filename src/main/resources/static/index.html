@@ -140,7 +140,7 @@
     shortUrlLink.textContent = link.shortUrl;
     shortUrlLink.href = link.shortUrl;
     originalText.textContent = 'Destino: ' + link.originalUrl;
-    statsLink.href = '/api/links/' + encodeURIComponent(link.code) + '/stats';
+    statsLink.href = '/stats.html?code=' + encodeURIComponent(link.code);
     copyBtn.textContent = 'Copiar';
     errorBox.hidden = true;
     resultBox.hidden = false;

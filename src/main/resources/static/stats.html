@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Estatísticas do link</title>
+  <style>
+    :root {
+      --bg: #f5f6f8;
+      --card: #ffffff;
+      --text: #1d2330;
+      --muted: #5f6b7a;
+      --border: #d8dde4;
+      --grid: #e8ebef;
+      --bar: #2f6fed;
+      --bar-hover: #1f5ad1;
+      --primary: #2f6fed;
+      --tooltip-bg: #1d2330;
+      --tooltip-text: #ffffff;
+      --error-bg: #fdecec;
+      --error-text: #a12626;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #12151b;
+        --card: #1b1f27;
+        --text: #e6e9ef;
+        --muted: #9aa4b2;
+        --border: #2e3440;
+        --grid: #272c36;
+        --bar: #5b8ff9;
+        --bar-hover: #7aa5fb;
+        --primary: #5b8ff9;
+        --tooltip-bg: #e6e9ef;
+        --tooltip-text: #12151b;
+        --error-bg: #3a1d1d;
+        --error-text: #ffb4b4;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    main {
+      width: 100%;
+      max-width: 640px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 28px;
+    }
+    a { color: var(--primary); }
+    .back { font-size: .9rem; }
+    h1 { margin: 12px 0 4px; font-size: 1.5rem; }
+    .meta { margin: 0; color: var(--muted); font-size: .9rem; word-break: break-all; }
+    .meta + .meta { margin-top: 4px; }
+
+    .totals { display: flex; gap: 32px; flex-wrap: wrap; margin: 24px 0 8px; }
+    .total-value { font-size: 2.5rem; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+    .total-label { margin-top: 4px; color: var(--muted); font-size: .9rem; }
+
+    h2 { margin: 24px 0 12px; font-size: 1rem; }
+
+    /* Gráfico: eixo y à esquerda, área das barras à direita, rótulos dos dias embaixo. */
+    .chart { display: grid; grid-template-columns: auto 1fr; grid-template-rows: 200px auto; column-gap: 8px; }
+    .y-axis { position: relative; width: 2.5em; }
+    .y-axis span {
+      position: absolute; right: 0; transform: translateY(50%);
+      font-size: .75rem; color: var(--muted); font-variant-numeric: tabular-nums;
+    }
+    .plot { position: relative; border-bottom: 1px solid var(--muted); }
+    .gridline { position: absolute; left: 0; right: 0; border-top: 1px solid var(--grid); }
+    .bars { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(7, 1fr); }
+    .bar-slot {
+      position: relative; display: flex; align-items: flex-end; justify-content: center;
+      cursor: default; outline: none;
+    }
+    .bar {
+      width: 60%; max-width: 44px;
+      background: var(--bar);
+      border-radius: 4px 4px 0 0; /* ponta arredondada só em cima: a base fica presa no eixo */
+    }
+    .bar-slot:hover .bar, .bar-slot:focus-visible .bar { background: var(--bar-hover); }
+    .bar-slot:focus-visible { box-shadow: inset 0 0 0 2px var(--primary); border-radius: 4px; }
+    .x-axis { grid-column: 2; display: grid; grid-template-columns: repeat(7, 1fr); margin-top: 6px; }
+    .x-axis span { text-align: center; font-size: .75rem; color: var(--muted); line-height: 1.3; }
+
+    .tooltip {
+      position: absolute; z-index: 1; pointer-events: none;
+      padding: 6px 8px; border-radius: 6px;
+      background: var(--tooltip-bg); color: var(--tooltip-text);
+      font-size: .8rem; white-space: nowrap;
+      transform: translate(-50%, calc(-100% - 8px));
+    }
+    .empty-note { margin: 8px 0 0; color: var(--muted); font-size: .9rem; }
+
+    details { margin-top: 20px; font-size: .9rem; }
+    summary { cursor: pointer; color: var(--muted); }
+    table { margin-top: 8px; border-collapse: collapse; width: 100%; max-width: 320px; }
+    th, td { padding: 4px 8px; border-bottom: 1px solid var(--border); text-align: left; }
+    td:last-child, th:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+
+    .error { margin-top: 16px; padding: 12px; border-radius: 8px; background: var(--error-bg); color: var(--error-text); }
+    .loading { margin-top: 16px; color: var(--muted); }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+<main>
+  <a class="back" href="/">← Encurtar outro link</a>
+  <h1>Estatísticas</h1>
+
+  <p id="loading" class="loading">Carregando…</p>
+  <div id="error" class="error" role="alert" hidden></div>
+
+  <section id="content" hidden>
+    <p class="meta">Link curto: <a id="short-url" target="_blank" rel="noopener"></a></p>
+    <p class="meta">Destino: <a id="original-url" target="_blank" rel="noopener noreferrer"></a></p>
+    <p class="meta" id="created-at"></p>
+
+    <div class="totals">
+      <div>
+        <div class="total-value" id="total"></div>
+        <div class="total-label">cliques no total</div>
+      </div>
+      <div>
+        <div class="total-value" id="week-total"></div>
+        <div class="total-label">nos últimos 7 dias</div>
+      </div>
+    </div>
+
+    <h2>Cliques por dia</h2>
+    <div class="chart" role="img" id="chart" aria-describedby="table-title">
+      <div class="y-axis" id="y-axis" aria-hidden="true"></div>
+      <div class="plot" id="plot">
+        <div class="bars" id="bars"></div>
+        <div class="tooltip" id="tooltip" hidden></div>
+      </div>
+      <div class="x-axis" id="x-axis" aria-hidden="true"></div>
+    </div>
+    <p class="empty-note" id="empty-note" hidden>Nenhum clique nos últimos 7 dias.</p>
+
+    <details>
+      <summary id="table-title">Ver os números em tabela</summary>
+      <table>
+        <thead><tr><th>Dia</th><th>Cliques</th></tr></thead>
+        <tbody id="table-body"></tbody>
+      </table>
+    </details>
+  </section>
+</main>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const WEEKDAYS = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+
+  // "2026-10-17" → Date no fuso do navegador. new Date("2026-10-17") interpretaria como
+  // meia-noite UTC, e no Brasil isso viraria o dia 16 às 21h, ou seja, o dia errado.
+  function parseDay(isoDate) {
+    const [y, m, d] = isoDate.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  }
+
+  function shortDate(date) {
+    return String(date.getDate()).padStart(2, '0') + '/' + String(date.getMonth() + 1).padStart(2, '0');
+  }
+
+  function clicksText(n) {
+    return n === 1 ? '1 clique' : n.toLocaleString('pt-BR') + ' cliques';
+  }
+
+  // Escolhe um topo "redondo" para o eixo y e o passo entre as linhas de grade.
+  function niceScale(max) {
+    if (max <= 0) return { top: 1, step: 1 };
+    const rawStep = max <= 5 ? 1 : max / 4;
+    const magnitude = Math.pow(10, Math.floor(Math.log10(rawStep)));
+    const step = [1, 2, 5, 10].map(f => f * magnitude).find(s => s >= rawStep);
+    return { top: Math.ceil(max / step) * step, step };
+  }
+
+  function showError(text) {
+    $('loading').hidden = true;
+    $('error').textContent = text;
+    $('error').hidden = false;
+  }
+
+  function renderChart(days) {
+    const max = Math.max(...days.map(d => d.clicks));
+    const { top, step } = niceScale(max);
+
+    // Eixo y e linhas de grade (discretas, para não competir com as barras).
+    for (let value = 0; value <= top; value += step) {
+      const bottom = (value / top) * 100 + '%';
+      const label = document.createElement('span');
+      label.textContent = value.toLocaleString('pt-BR');
+      label.style.bottom = bottom;
+      $('y-axis').appendChild(label);
+      if (value > 0) {
+        const line = document.createElement('div');
+        line.className = 'gridline';
+        line.style.bottom = bottom;
+        $('plot').insertBefore(line, $('bars'));
+      }
+    }
+
+    days.forEach(day => {
+      const date = parseDay(day.date);
+      const dayLabel = WEEKDAYS[date.getDay()] + ' ' + shortDate(date);
+
+      // A "fatia" ocupa a coluna inteira: a área de hover é maior do que a barra.
+      const slot = document.createElement('div');
+      slot.className = 'bar-slot';
+      slot.tabIndex = 0;
+      slot.setAttribute('aria-label', dayLabel + ': ' + clicksText(day.clicks));
+      slot.dataset.tooltip = dayLabel + ': ' + clicksText(day.clicks);
+
+      if (day.clicks > 0) {
+        const bar = document.createElement('div');
+        bar.className = 'bar';
+        bar.style.height = (day.clicks / top) * 100 + '%';
+        slot.appendChild(bar);
+      }
+      $('bars').appendChild(slot);
+
+      const xLabel = document.createElement('span');
+      xLabel.append(WEEKDAYS[date.getDay()], document.createElement('br'), shortDate(date));
+      $('x-axis').appendChild(xLabel);
+
+      const row = document.createElement('tr');
+      const cellDay = document.createElement('td');
+      const cellClicks = document.createElement('td');
+      cellDay.textContent = dayLabel;
+      cellClicks.textContent = day.clicks.toLocaleString('pt-BR');
+      row.append(cellDay, cellClicks);
+      $('table-body').appendChild(row);
+    });
+
+    $('empty-note').hidden = max > 0;
+    $('chart').setAttribute('aria-label', 'Gráfico de barras com os cliques por dia nos últimos 7 dias');
+  }
+
+  // Tooltip: aparece sobre a coluna em hover (mouse) ou foco (teclado).
+  function showTooltip(slot) {
+    const tooltip = $('tooltip');
+    const plotBox = $('plot').getBoundingClientRect();
+    const slotBox = slot.getBoundingClientRect();
+    const bar = slot.querySelector('.bar');
+    const topY = bar ? bar.getBoundingClientRect().top : slotBox.bottom;
+    tooltip.textContent = slot.dataset.tooltip;
+    tooltip.style.left = (slotBox.left + slotBox.width / 2 - plotBox.left) + 'px';
+    tooltip.style.top = (topY - plotBox.top) + 'px';
+    tooltip.hidden = false;
+  }
+  function hideTooltip() { $('tooltip').hidden = true; }
+
+  $('bars').addEventListener('mouseover', e => { const s = e.target.closest('.bar-slot'); if (s) showTooltip(s); });
+  $('bars').addEventListener('mouseleave', hideTooltip);
+  $('bars').addEventListener('focusin', e => { const s = e.target.closest('.bar-slot'); if (s) showTooltip(s); });
+  $('bars').addEventListener('focusout', hideTooltip);
+
+  async function load() {
+    const code = new URLSearchParams(location.search).get('code');
+    if (!code || !/^[0-9a-zA-Z]{1,16}$/.test(code)) {
+      showError('Informe um código válido no endereço, por exemplo: /stats.html?code=6LAzf');
+      return;
+    }
+
+    let response;
+    try {
+      response = await fetch('/api/links/' + encodeURIComponent(code) + '/stats');
+    } catch (e) {
+      showError('Não foi possível falar com o servidor. Ele está rodando?');
+      return;
+    }
+    if (response.status === 404) {
+      showError('Nenhum link encontrado para o código "' + code + '".');
+      return;
+    }
+    if (!response.ok) {
+      showError('Não foi possível carregar as estatísticas (erro ' + response.status + ').');
+      return;
+    }
+
+    const stats = await response.json();
+    document.title = 'Estatísticas de ' + stats.code;
+
+    const shortUrl = location.origin + '/' + stats.code;
+    $('short-url').textContent = shortUrl;
+    $('short-url').href = shortUrl;
+    // textContent (e não innerHTML): a URL nunca é interpretada como HTML.
+    $('original-url').textContent = stats.originalUrl;
+    $('original-url').href = stats.originalUrl;
+    $('created-at').textContent = 'Criado em ' + new Date(stats.createdAt).toLocaleString('pt-BR');
+
+    $('total').textContent = stats.totalClicks.toLocaleString('pt-BR');
+    const weekTotal = stats.clicksLast7Days.reduce((sum, d) => sum + d.clicks, 0);
+    $('week-total').textContent = weekTotal.toLocaleString('pt-BR');
+
+    renderChart(stats.clicksLast7Days);
+
+    $('loading').hidden = true;
+    $('content').hidden = false;
+  }
+
+  load();
+</script>
+</body>
+</html>

@@ -36,6 +36,20 @@ class WebPagesIntegrationTest {
     }
 
     @Test
+    void paginaDeEstatisticasEhServida() throws Exception {
+        // Tem ponto no caminho, então não cai na rota /{code}.
+        mockMvc.perform(get("/stats.html").param("code", "6LAzf"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Cliques por dia")));
+    }
+
+    @Test
+    void paginaInicialApontaParaAPaginaDeEstatisticas() throws Exception {
+        mockMvc.perform(get("/index.html"))
+                .andExpect(content().string(containsString("'/stats.html?code='")));
+    }
+
+    @Test
     void documentacaoOpenApiListaOsEndpoints() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())
