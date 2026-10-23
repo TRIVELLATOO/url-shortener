@@ -1,6 +1,7 @@
 package com.pablo.shortener.link;
 
 import com.pablo.shortener.config.AppProperties;
+import com.pablo.shortener.config.RedisErrors;
 import java.time.Duration;
 import java.util.Optional;
 import lombok.extern.slf4j.Slf4j;
@@ -46,7 +47,7 @@ public class LinkCache {
             log.debug("Cache HIT para o código {}", code);
             return Optional.of(jsonMapper.readValue(json, CachedLink.class));
         } catch (DataAccessException | JacksonException e) {
-            log.warn("Falha ao ler o cache para o código {}; seguindo pelo banco: {}", code, e.getMessage());
+            log.warn("Falha ao ler o cache para o código {}; seguindo pelo banco: {}", code, RedisErrors.describe(e));
             return Optional.empty();
         }
     }
@@ -56,7 +57,7 @@ public class LinkCache {
             // SET com expiração: o Redis apaga a chave sozinho quando o TTL acaba.
             redis.opsForValue().set(key(code), jsonMapper.writeValueAsString(link), ttl);
         } catch (DataAccessException | JacksonException e) {
-            log.warn("Falha ao gravar o cache para o código {}: {}", code, e.getMessage());
+            log.warn("Falha ao gravar o cache para o código {}: {}", code, RedisErrors.describe(e));
         }
     }
 

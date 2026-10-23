@@ -20,6 +20,7 @@ public class CreateLinkRateLimitInterceptor implements HandlerInterceptor {
     static final String KEY_PREFIX = "ratelimit:create:";
 
     private final RateLimiter rateLimiter;
+    private final ClientIpResolver clientIpResolver;
     private final AppProperties appProperties;
 
     @Override
@@ -28,9 +29,7 @@ public class CreateLinkRateLimitInterceptor implements HandlerInterceptor {
             return true;
         }
         AppProperties.RateLimit limit = appProperties.rateLimit();
-        // Com server.forward-headers-strategy=native, o Tomcat já troca o getRemoteAddr() pelo IP
-        // real do cliente vindo do X-Forwarded-For (quando a conexão vem de um proxy confiável).
-        String clientIp = request.getRemoteAddr();
+        String clientIp = clientIpResolver.resolve(request);
         log.debug("Rate limit de criação para o IP {}", clientIp);
         RateLimitDecision decision = rateLimiter.tryAcquire(
                 KEY_PREFIX + clientIp, limit.maxCreations(), limit.window());

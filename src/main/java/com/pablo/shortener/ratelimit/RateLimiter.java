@@ -1,5 +1,6 @@
 package com.pablo.shortener.ratelimit;
 
+import com.pablo.shortener.config.RedisErrors;
 import java.time.Duration;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
@@ -58,7 +59,8 @@ public class RateLimiter {
             long retryAfterSeconds = Math.max(1, (ttlMillis + 999) / 1000);
             return RateLimitDecision.reject(retryAfterSeconds);
         } catch (DataAccessException e) {
-            log.warn("Falha no rate limit para a chave {}; liberando a requisição: {}", key, e.getMessage());
+            log.warn("Falha no rate limit para a chave {}; liberando a requisição: {}", key, RedisErrors.describe(e));
+            log.debug("Stack trace da falha no rate limit", e);
             return RateLimitDecision.allow();
         }
     }

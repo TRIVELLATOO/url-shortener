@@ -16,7 +16,8 @@ public record AppProperties(
         @NotBlank String baseUrl,
         @NotNull @Valid Cache cache,
         @NotNull @Valid Stats stats,
-        @NotNull @Valid RateLimit rateLimit) {
+        @NotNull @Valid RateLimit rateLimit,
+        @NotNull @Valid ClientIp clientIp) {
 
     public AppProperties {
         // Remove a barra final para não gerar "http://localhost:8080//abc".
@@ -35,5 +36,12 @@ public record AppProperties(
 
     /** Limite de criação de links por IP: no máximo "maxCreations" a cada "window". */
     public record RateLimit(@Positive int maxCreations, @NotNull Duration window) {
+    }
+
+    /**
+     * Como descobrir o IP do cliente. "header" vazio = usar o IP da conexão (ajustado pelo Tomcat).
+     * "logHeaders" liga um log temporário com os cabeçalhos de IP de cada criação de link.
+     */
+    public record ClientIp(String header, boolean logHeaders) {
     }
 }

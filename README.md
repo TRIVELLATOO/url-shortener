@@ -97,10 +97,13 @@ Todas são opcionais: os valores padrão funcionam com o `docker-compose.yml`.
 | `REDIS_HOST` / `REDIS_PORT` | `localhost` / `6379` | Conexão com o Redis |
 | `REDIS_USERNAME` / `REDIS_PASSWORD` | vazios | Credenciais do Redis (vazias para o Redis local) |
 | `REDIS_SSL` | `false` | Liga o TLS na conexão com o Redis (`true` no Upstash) |
-| `REDIS_TIMEOUT` | `500ms` | Tempo máximo de espera por um comando no Redis |
+| `REDIS_TIMEOUT` | `500ms` | Tempo máximo de espera por um comando no Redis (vale também para a inicialização da conexão) |
+| `REDIS_CONNECT_TIMEOUT` | `3s` | Tempo máximo para abrir a conexão TCP com o Redis |
 | `PORT` | — | Porta da aplicação; definida automaticamente por plataformas como o Render |
 | `SERVER_PORT` | `8080` | Porta da aplicação, usada quando `PORT` não existe |
 | `FORWARD_HEADERS_STRATEGY` | `native` | Como ler o IP real do cliente atrás de proxy (ver Decisões técnicas) |
+| `CLIENT_IP_HEADER` | vazio | Cabeçalho confiável com o IP real do cliente (ex.: `CF-Connecting-IP` atrás da Cloudflare) |
+| `LOG_CLIENT_IP_HEADERS` | `false` | Diagnóstico temporário: loga os cabeçalhos de IP a cada criação de link |
 | `TOMCAT_MAX_THREADS` | `50` | Máximo de threads para atender requisições |
 | `APP_BASE_URL` | `http://localhost:8080` | Endereço público usado para montar a URL curta |
 | `LINK_CACHE_TTL` | `24h` | Tempo de vida de um link no cache |
@@ -141,9 +144,11 @@ O projeto está pronto para rodar no plano gratuito do **Render** (512 MB de RAM
 | `REDIS_USERNAME` | `default` |
 | `REDIS_PASSWORD` | senha do Upstash |
 | `REDIS_SSL` | `true` |
+| `REDIS_TIMEOUT` | `1s` (mais margem para a conexão TLS com o Upstash) |
+| `CLIENT_IP_HEADER` | `CF-Connecting-IP` (o Render fica atrás da Cloudflare) |
 | `APP_BASE_URL` | URL pública do serviço no Render (ex.: `https://url-shortener-xxxx.onrender.com`) |
 
-O Flyway cria as tabelas no Neon no primeiro start.
+O Flyway cria as tabelas no Neon no primeiro start. No log de inicialização, a linha `Conexão com o Redis OK` confirma que o Upstash está acessível; se der erro, a linha seguinte mostra a causa (por exemplo, `WRONGPASS` para senha errada).
 
 ## Endpoints
 
@@ -252,6 +257,7 @@ O timeout do Redis é curto (500ms) para não travar as requisições.
 - Ele só confia nesse cabeçalho quando a conexão vem de um IP de rede interna (o proxy), e usa o IP mais à direita que não é de proxy.
 - Assim, um cliente não consegue burlar o rate limit mandando um `X-Forwarded-For` falso: o IP inventado fica à esquerda e é ignorado.
 - Sem proxy, quem se conecta direto pela internet não é "interno", e o cabeçalho é ignorado.
+- **Atrás da Cloudflare (caso do Render),** isso não basta: os servidores da Cloudflare têm IPs públicos, então o Tomcat para neles, e cada requisição parece vir de um IP diferente. Por isso existe o `CLIENT_IP_HEADER=CF-Connecting-IP`: a Cloudflare preenche esse cabeçalho com o IP real e sobrescreve qualquer valor enviado pelo cliente, então ele não pode ser falsificado. O valor ainda é validado como IP antes de virar chave no Redis. Só configure esse cabeçalho quando toda requisição passar obrigatoriamente pela Cloudflare.
 
 **Estatísticas agregadas no banco e no fuso certo.**
 - A contagem por dia é feita com `GROUP BY` no PostgreSQL, usando o índice `clicks(link_id, clicked_at)`.
@@ -270,7 +276,8 @@ O timeout do Redis é curto (500ms) para não travar as requisições.
 - **Sem invalidação de cache:** hoje os links nunca mudam nem são apagados. Se surgir um endpoint para editar ou apagar links, ele precisa remover a chave do Redis.
 - **Códigos inexistentes não são cacheados:** pedidos repetidos para códigos que não existem sempre vão ao banco (faltaria *negative caching*).
 - **Janela fixa no rate limit:** na virada da janela, um IP consegue fazer até 2× o limite em poucos segundos. Uma janela deslizante (*sliding window*) ou um *token bucket* resolveria.
-- **Proxy com IP público:** o IP real do cliente só é lido do `X-Forwarded-For` quando o proxy se conecta por um IP de rede interna. Se o proxy de alguma plataforma usar um IP público, todos os clientes vão parecer ter o mesmo IP. Nesse caso, é preciso configurar `server.tomcat.remoteip.internal-proxies` com os IPs do proxy. Com `RATE_LIMIT_LOG_LEVEL=debug`, o log mostra qual IP está sendo usado.
+- **Depende da plataforma para o IP real:** o `CF-Connecting-IP` só é confiável enquanto a aplicação estiver acessível apenas pela Cloudflare. Em outra plataforma, é preciso revisar `CLIENT_IP_HEADER` (ou configurar `server.tomcat.remoteip.internal-proxies` com os IPs do proxy). Com `RATE_LIMIT_LOG_LEVEL=debug`, o log mostra qual IP está sendo usado.
+- **IPv6:** cada cliente IPv6 costuma ter um bloco enorme de endereços (um /64), e pode trocar de IP para contornar o limite. Uma melhoria seria agrupar os IPv6 pelo prefixo /64.
 - **Plano gratuito do Render:** o serviço "dorme" depois de um tempo sem acessos, e o primeiro acesso depois disso demora alguns segundos para acordar.
 - **Estatísticas sem autenticação:** qualquer pessoa que souber o código pode ver as estatísticas do link.
 - **Testes usam o banco de desenvolvimento:** os testes de integração rodam no PostgreSQL e no Redis do Docker Compose. Com Testcontainers, cada execução teria containers descartáveis.

@@ -32,9 +32,12 @@ spring:
       ssl:
         # O Upstash só aceita conexões com TLS.
         enabled: ${REDIS_SSL:false}
-      # Timeout curto: se o Redis travar, a requisição não fica esperando segundos.
+      # Timeout de cada comando: curto, para uma requisição não ficar esperando o Redis travado.
+      # Atenção: a inicialização da conexão (aperto de mão TLS + autenticação) também usa este valor.
+      # Com o Redis em outra rede (ex.: Upstash), 1s dá mais margem.
       timeout: ${REDIS_TIMEOUT:500ms}
-      connect-timeout: ${REDIS_TIMEOUT:500ms}
+      # Timeout só para abrir a conexão TCP.
+      connect-timeout: ${REDIS_CONNECT_TIMEOUT:3s}
 
 server:
   # O Render define a variável PORT; localmente, o padrão continua 8080.
@@ -78,6 +81,13 @@ app:
     # Quantos links um mesmo IP pode criar por janela de tempo.
     max-creations: ${RATE_LIMIT_MAX_CREATIONS:10}
     window: ${RATE_LIMIT_WINDOW:1m}
+  client-ip:
+    # Cabeçalho com o IP real do cliente, preenchido por um proxy confiável que SOBRESCREVE o valor
+    # (ex.: CF-Connecting-IP, quando toda requisição passa pela Cloudflare, como no Render).
+    # Vazio = usar o IP da conexão. Nunca configure um cabeçalho que o cliente consiga enviar direto.
+    header: ${CLIENT_IP_HEADER:}
+    # Diagnóstico temporário: loga os cabeçalhos de IP a cada criação de link.
+    log-headers: ${LOG_CLIENT_IP_HEADERS:false}
 
 logging:
   level:
