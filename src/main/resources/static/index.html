@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Encurtador de URL</title>
+  <style>
+    :root {
+      --bg: #f5f6f8;
+      --card: #ffffff;
+      --text: #1d2330;
+      --muted: #5f6b7a;
+      --border: #d8dde4;
+      --primary: #2f6fed;
+      --primary-hover: #1f5ad1;
+      --error-bg: #fdecec;
+      --error-text: #a12626;
+      --ok-bg: #eaf6ee;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #12151b;
+        --card: #1b1f27;
+        --text: #e6e9ef;
+        --muted: #9aa4b2;
+        --border: #2e3440;
+        --primary: #5b8ff9;
+        --primary-hover: #7aa5fb;
+        --error-bg: #3a1d1d;
+        --error-text: #ffb4b4;
+        --ok-bg: #1d3326;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    main {
+      width: 100%;
+      max-width: 560px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 28px;
+    }
+    h1 { margin: 0 0 4px; font-size: 1.5rem; }
+    .subtitle { margin: 0 0 20px; color: var(--muted); }
+    form { display: flex; gap: 8px; flex-wrap: wrap; }
+    input[type="url"] {
+      flex: 1 1 260px;
+      min-width: 0;
+      padding: 10px 12px;
+      font-size: 1rem;
+      color: var(--text);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    button {
+      padding: 10px 16px;
+      font-size: 1rem;
+      font-weight: 600;
+      color: #fff;
+      background: var(--primary);
+      border: 0;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    button:hover { background: var(--primary-hover); }
+    button:disabled { opacity: .6; cursor: wait; }
+    .message { margin-top: 16px; padding: 12px; border-radius: 8px; }
+    .error { background: var(--error-bg); color: var(--error-text); }
+    .result { background: var(--ok-bg); }
+    .short-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .short-url { font-weight: 600; font-size: 1.1rem; color: var(--primary); word-break: break-all; }
+    .original { margin: 8px 0 0; color: var(--muted); font-size: .9rem; word-break: break-all; }
+    .links { margin-top: 10px; font-size: .9rem; }
+    .links a { color: var(--primary); }
+    footer { margin-top: 24px; font-size: .85rem; color: var(--muted); }
+    footer a { color: var(--muted); }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Encurtador de URL</h1>
+  <p class="subtitle">Cole um link longo e receba um link curto.</p>
+
+  <form id="form">
+    <input id="url" type="url" required maxlength="2048"
+           placeholder="https://exemplo.com/um/link/bem/comprido" aria-label="URL para encurtar">
+    <button id="submit" type="submit">Encurtar</button>
+  </form>
+
+  <div id="error" class="message error" role="alert" hidden></div>
+
+  <div id="result" class="message result" hidden>
+    <div class="short-row">
+      <a id="short-url" class="short-url" target="_blank" rel="noopener"></a>
+      <button id="copy" type="button">Copiar</button>
+    </div>
+    <p id="original" class="original"></p>
+    <div class="links">
+      <a id="stats" target="_blank" rel="noopener">Ver estatísticas</a>
+    </div>
+  </div>
+
+  <footer>
+    API documentada no <a href="/swagger-ui.html">Swagger</a>.
+  </footer>
+</main>
+
+<script>
+  const form = document.getElementById('form');
+  const urlInput = document.getElementById('url');
+  const submitBtn = document.getElementById('submit');
+  const errorBox = document.getElementById('error');
+  const resultBox = document.getElementById('result');
+  const shortUrlLink = document.getElementById('short-url');
+  const originalText = document.getElementById('original');
+  const statsLink = document.getElementById('stats');
+  const copyBtn = document.getElementById('copy');
+
+  function showError(text) {
+    // textContent (e não innerHTML): o texto nunca é interpretado como HTML.
+    errorBox.textContent = text;
+    errorBox.hidden = false;
+    resultBox.hidden = true;
+  }
+
+  function showResult(link) {
+    shortUrlLink.textContent = link.shortUrl;
+    shortUrlLink.href = link.shortUrl;
+    originalText.textContent = 'Destino: ' + link.originalUrl;
+    statsLink.href = '/api/links/' + encodeURIComponent(link.code) + '/stats';
+    copyBtn.textContent = 'Copiar';
+    errorBox.hidden = true;
+    resultBox.hidden = false;
+  }
+
+  async function errorMessage(response) {
+    let body = {};
+    try { body = await response.json(); } catch (e) { /* resposta sem JSON */ }
+
+    if (response.status === 429) {
+      const wait = response.headers.get('Retry-After');
+      return 'Você criou muitos links em pouco tempo. Tente de novo em ' + (wait || 'alguns') + ' segundo(s).';
+    }
+    if (body.errors) {
+      return Object.values(body.errors).join(' ');
+    }
+    return body.detail || 'Não foi possível encurtar o link (erro ' + response.status + ').';
+  }
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    submitBtn.disabled = true;
+    try {
+      const response = await fetch('/api/links', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: urlInput.value.trim() })
+      });
+      if (!response.ok) {
+        showError(await errorMessage(response));
+        return;
+      }
+      showResult(await response.json());
+    } catch (e) {
+      showError('Não foi possível falar com o servidor. Ele está rodando?');
+    } finally {
+      submitBtn.disabled = false;
+    }
+  });
+
+  // Plano B para navegadores que bloqueiam a API de área de transferência:
+  // coloca o texto num campo invisível, seleciona e usa o comando "copiar" do navegador.
+  function copyWithSelection(text) {
+    const field = document.createElement('textarea');
+    field.value = text;
+    field.setAttribute('readonly', '');
+    field.style.position = 'fixed';
+    field.style.opacity = '0';
+    document.body.appendChild(field);
+    field.select();
+    const ok = document.execCommand('copy');
+    field.remove();
+    return ok;
+  }
+
+  copyBtn.addEventListener('click', async () => {
+    const text = shortUrlLink.href;
+    let copied = false;
+    try {
+      await navigator.clipboard.writeText(text);
+      copied = true;
+    } catch (e) {
+      copied = copyWithSelection(text);
+    }
+    copyBtn.textContent = copied ? 'Copiado!' : 'Não deu para copiar';
+    setTimeout(() => { copyBtn.textContent = 'Copiar'; }, 2000);
+  });
+</script>
+</body>
+</html>
