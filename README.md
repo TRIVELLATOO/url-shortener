@@ -92,9 +92,16 @@ Todas são opcionais: os valores padrão funcionam com o `docker-compose.yml`.
 |---|---|---|
 | `DB_HOST` / `DB_PORT` / `DB_NAME` | `localhost` / `5432` / `shortener` | Conexão com o PostgreSQL |
 | `DB_USER` / `DB_PASSWORD` | `shortener` / `shortener` | Credenciais do PostgreSQL |
+| `DB_SSLMODE` | `prefer` | Modo SSL do PostgreSQL (`require` em bancos na nuvem, como o Neon) |
+| `DB_POOL_SIZE` | `5` | Máximo de conexões abertas com o banco |
 | `REDIS_HOST` / `REDIS_PORT` | `localhost` / `6379` | Conexão com o Redis |
+| `REDIS_USERNAME` / `REDIS_PASSWORD` | vazios | Credenciais do Redis (vazias para o Redis local) |
+| `REDIS_SSL` | `false` | Liga o TLS na conexão com o Redis (`true` no Upstash) |
 | `REDIS_TIMEOUT` | `500ms` | Tempo máximo de espera por um comando no Redis |
-| `SERVER_PORT` | `8080` | Porta da aplicação |
+| `PORT` | — | Porta da aplicação; definida automaticamente por plataformas como o Render |
+| `SERVER_PORT` | `8080` | Porta da aplicação, usada quando `PORT` não existe |
+| `FORWARD_HEADERS_STRATEGY` | `native` | Como ler o IP real do cliente atrás de proxy (ver Decisões técnicas) |
+| `TOMCAT_MAX_THREADS` | `50` | Máximo de threads para atender requisições |
 | `APP_BASE_URL` | `http://localhost:8080` | Endereço público usado para montar a URL curta |
 | `LINK_CACHE_TTL` | `24h` | Tempo de vida de um link no cache |
 | `STATS_ZONE` | `America/Sao_Paulo` | Fuso usado para agrupar os cliques por dia |
@@ -102,6 +109,41 @@ Todas são opcionais: os valores padrão funcionam com o `docker-compose.yml`.
 | `RATE_LIMIT_WINDOW` | `1m` | Tamanho da janela do rate limit |
 | `SQL_LOG_LEVEL` | `info` | Use `debug` para ver o SQL executado no log |
 | `CACHE_LOG_LEVEL` | `info` | Use `debug` para ver os HIT/MISS do cache no log |
+| `RATE_LIMIT_LOG_LEVEL` | `info` | Use `debug` para ver no log qual IP o rate limit está usando |
+| `JAVA_TOOL_OPTIONS` | (definida no Dockerfile) | Opções de memória da JVM dentro do contêiner |
+
+## Deploy (Render + Neon + Upstash)
+
+O projeto está pronto para rodar no plano gratuito do **Render** (512 MB de RAM), com o PostgreSQL no **Neon** e o Redis no **Upstash**.
+
+- **[Dockerfile](Dockerfile) multi-stage:** o primeiro estágio compila com o JDK, e a imagem final leva só o JRE e o `.jar`, rodando com um usuário sem privilégios.
+- **Memória da JVM ajustada para 512 MB** (`JAVA_TOOL_OPTIONS`): heap de no máximo 50% da RAM, tetos para metaspace, code cache e memória direta, pilhas de thread menores e o coletor de lixo mais econômico (`SerialGC`). Num contêiner limitado a 512 MB, a aplicação usou cerca de 270 MB parada e cerca de 290 MB depois de 800 requisições com 20 em paralelo.
+- **Health check:** `GET /actuator/health` responde `{"status":"UP"}`. Só esse endpoint do Actuator fica exposto, sem detalhes. Ele verifica o banco, mas não o Redis: a aplicação funciona sem o Redis, então uma falha nele não deve fazer o Render reiniciar o serviço.
+- **Porta:** usa a variável `PORT` que o Render define.
+
+### Passo a passo
+
+1. **Neon:** crie um projeto. No painel *Connect*, desligue *Connection pooling* (conexão direta) e copie host, banco, usuário e senha.
+2. **Upstash:** crie um banco Redis, de preferência na mesma região do Render. Copie o endpoint, a porta e a senha.
+3. **Render:** crie um *Web Service* a partir deste repositório, com *Runtime: Docker* e o plano *Free*.
+   - Em *Health Check Path*, use `/actuator/health`.
+   - Configure as variáveis abaixo e faça o deploy.
+
+| Variável | Valor |
+|---|---|
+| `DB_HOST` | host do Neon (ex.: `ep-xxxx.us-east-2.aws.neon.tech`) |
+| `DB_PORT` | `5432` |
+| `DB_NAME` | nome do banco no Neon (ex.: `neondb`) |
+| `DB_USER` / `DB_PASSWORD` | usuário e senha do Neon |
+| `DB_SSLMODE` | `require` |
+| `REDIS_HOST` | endpoint do Upstash (ex.: `xxxx.upstash.io`) |
+| `REDIS_PORT` | porta do Upstash (normalmente `6379`) |
+| `REDIS_USERNAME` | `default` |
+| `REDIS_PASSWORD` | senha do Upstash |
+| `REDIS_SSL` | `true` |
+| `APP_BASE_URL` | URL pública do serviço no Render (ex.: `https://url-shortener-xxxx.onrender.com`) |
+
+O Flyway cria as tabelas no Neon no primeiro start.
 
 ## Endpoints
 
@@ -205,6 +247,12 @@ O timeout do Redis é curto (500ms) para não travar as requisições.
 - `INCR` e `PEXPIRE` rodam num único script, de forma atômica. Com dois comandos separados, uma falha entre eles deixaria a chave sem expiração, e o IP ficaria bloqueado para sempre.
 - É implementado como `HandlerInterceptor`, separado da regra de negócio.
 
+**IP real do cliente atrás de proxy.**
+- Com `server.forward-headers-strategy: native`, o Tomcat (`RemoteIpValve`) troca o IP da conexão pelo IP do cliente informado no `X-Forwarded-For`.
+- Ele só confia nesse cabeçalho quando a conexão vem de um IP de rede interna (o proxy), e usa o IP mais à direita que não é de proxy.
+- Assim, um cliente não consegue burlar o rate limit mandando um `X-Forwarded-For` falso: o IP inventado fica à esquerda e é ignorado.
+- Sem proxy, quem se conecta direto pela internet não é "interno", e o cabeçalho é ignorado.
+
 **Estatísticas agregadas no banco e no fuso certo.**
 - A contagem por dia é feita com `GROUP BY` no PostgreSQL, usando o índice `clicks(link_id, clicked_at)`.
 - Os dias, inclusive o início da janela (meia-noite), são calculados no fuso `STATS_ZONE`, e não em UTC.
@@ -222,7 +270,8 @@ O timeout do Redis é curto (500ms) para não travar as requisições.
 - **Sem invalidação de cache:** hoje os links nunca mudam nem são apagados. Se surgir um endpoint para editar ou apagar links, ele precisa remover a chave do Redis.
 - **Códigos inexistentes não são cacheados:** pedidos repetidos para códigos que não existem sempre vão ao banco (faltaria *negative caching*).
 - **Janela fixa no rate limit:** na virada da janela, um IP consegue fazer até 2× o limite em poucos segundos. Uma janela deslizante (*sliding window*) ou um *token bucket* resolveria.
-- **IP atrás de proxy:** o rate limit usa `request.getRemoteAddr()`. Atrás de um proxy ou load balancer, é preciso configurar `server.forward-headers-strategy` para usar o IP real do cliente, e só aceitar o `X-Forwarded-For` vindo de proxies confiáveis.
+- **Proxy com IP público:** o IP real do cliente só é lido do `X-Forwarded-For` quando o proxy se conecta por um IP de rede interna. Se o proxy de alguma plataforma usar um IP público, todos os clientes vão parecer ter o mesmo IP. Nesse caso, é preciso configurar `server.tomcat.remoteip.internal-proxies` com os IPs do proxy. Com `RATE_LIMIT_LOG_LEVEL=debug`, o log mostra qual IP está sendo usado.
+- **Plano gratuito do Render:** o serviço "dorme" depois de um tempo sem acessos, e o primeiro acesso depois disso demora alguns segundos para acordar.
 - **Estatísticas sem autenticação:** qualquer pessoa que souber o código pode ver as estatísticas do link.
 - **Testes usam o banco de desenvolvimento:** os testes de integração rodam no PostgreSQL e no Redis do Docker Compose. Com Testcontainers, cada execução teria containers descartáveis.
 - **Sem expiração de links:** os links são permanentes.

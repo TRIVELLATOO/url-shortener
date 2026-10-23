@@ -3,9 +3,13 @@ spring:
     name: shortener
 
   datasource:
-    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:shortener}
+    # DB_SSLMODE: "prefer" usa SSL se o servidor oferecer (local funciona sem). No Neon, use "require".
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:shortener}?sslmode=${DB_SSLMODE:prefer}
     username: ${DB_USER:shortener}
     password: ${DB_PASSWORD:shortener}
+    hikari:
+      # Poucas conexões: economiza memória e respeita o limite de conexões de bancos gratuitos.
+      maximum-pool-size: ${DB_POOL_SIZE:5}
 
   jpa:
     # O schema é responsabilidade do Flyway; o Hibernate só confere se as entidades batem com o banco.
@@ -22,12 +26,44 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+      # Vazios por padrão (Redis local sem senha). No Upstash: usuário "default" + senha do painel.
+      username: ${REDIS_USERNAME:}
+      password: ${REDIS_PASSWORD:}
+      ssl:
+        # O Upstash só aceita conexões com TLS.
+        enabled: ${REDIS_SSL:false}
       # Timeout curto: se o Redis travar, a requisição não fica esperando segundos.
       timeout: ${REDIS_TIMEOUT:500ms}
       connect-timeout: ${REDIS_TIMEOUT:500ms}
 
 server:
-  port: ${SERVER_PORT:8080}
+  # O Render define a variável PORT; localmente, o padrão continua 8080.
+  port: ${PORT:${SERVER_PORT:8080}}
+  # Atrás de um proxy (como o do Render), lê o IP real do cliente no X-Forwarded-For.
+  # O Tomcat só confia nesse cabeçalho quando a conexão vem de um IP de rede interna
+  # (10.x, 172.16-31.x, 192.168.x, 127.x...), e usa o IP mais à direita que não é de proxy,
+  # então um cliente não consegue "inventar" outro IP mandando o próprio X-Forwarded-For.
+  forward-headers-strategy: ${FORWARD_HEADERS_STRATEGY:native}
+  tomcat:
+    threads:
+      # Menos threads = menos memória (cada thread reserva uma pilha). Suficiente para um projeto pequeno.
+      max: ${TOMCAT_MAX_THREADS:50}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # Só o /actuator/health fica público; os outros endpoints do Actuator ficam desligados.
+        include: health
+  endpoint:
+    health:
+      # Responde só {"status":"UP"}, sem expor detalhes da infraestrutura.
+      show-details: never
+  health:
+    # A aplicação funciona sem o Redis (cache e rate limit são opcionais), então uma falha
+    # no Redis não deve marcar a aplicação como fora do ar e fazer o Render reiniciá-la.
+    redis:
+      enabled: false
 
 app:
   # Endereço público usado para montar a URL curta devolvida pela API.
@@ -48,3 +84,5 @@ logging:
     # Use "debug" para ver no log o SQL executado e os HIT/MISS do cache.
     org.hibernate.SQL: ${SQL_LOG_LEVEL:info}
     com.pablo.shortener.link.LinkCache: ${CACHE_LOG_LEVEL:info}
+    # Use "debug" para ver qual IP o rate limit está usando (útil para conferir o proxy).
+    com.pablo.shortener.ratelimit: ${RATE_LIMIT_LOG_LEVEL:info}

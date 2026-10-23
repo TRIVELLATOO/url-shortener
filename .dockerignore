@@ -1,0 +1,17 @@
+# Tudo o que não precisa ir para o build da imagem (deixa o build mais rápido e evita vazar arquivos locais).
+target/
+.git/
+.gitignore
+.gitattributes
+.idea/
+.vscode/
+.claude/
+*.iml
+*.log
+.env
+.env.*
+docker-compose.yml
+Dockerfile
+.dockerignore
+README.md
+HELP.md
