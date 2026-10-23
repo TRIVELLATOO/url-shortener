@@ -35,6 +35,9 @@ app:
   cache:
     # Por quanto tempo um link fica guardado no Redis (ex.: 24h, 30m, 30s).
     link-ttl: ${LINK_CACHE_TTL:24h}
+  stats:
+    # Fuso usado para decidir em que "dia" cada clique caiu nas estatísticas.
+    zone: ${STATS_ZONE:America/Sao_Paulo}
 
 logging:
   level:

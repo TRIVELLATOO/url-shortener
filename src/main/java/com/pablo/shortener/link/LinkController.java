@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class LinkController {
 
     private final LinkService linkService;
+    private final LinkStatsService linkStatsService;
     private final AppProperties appProperties;
 
     @PostMapping("/api/links")
@@ -26,6 +27,12 @@ public class LinkController {
         LinkResponse response = LinkResponse.from(link, appProperties.baseUrl());
         // 201 Created + cabeçalho Location apontando para o recurso criado.
         return ResponseEntity.created(URI.create(response.shortUrl())).body(response);
+    }
+
+    // Não passa pelo cache nem conta como clique: ver as estatísticas não é acessar o link.
+    @GetMapping("/api/links/{code}/stats")
+    public LinkStatsResponse stats(@PathVariable String code) {
+        return linkStatsService.getStats(code);
     }
 
     // O regex limita a rota a códigos Base62: /favicon.ico, /index.html etc. não caem aqui.

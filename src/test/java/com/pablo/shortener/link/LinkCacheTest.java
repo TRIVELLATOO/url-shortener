@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 
 import com.pablo.shortener.config.AppProperties;
 import java.time.Duration;
+import java.time.ZoneId;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.RedisConnectionFailureException;
@@ -28,7 +29,8 @@ class LinkCacheTest {
         StringRedisTemplate redis = mock(StringRedisTemplate.class);
         valueOps = mock(ValueOperations.class);
         when(redis.opsForValue()).thenReturn(valueOps);
-        AppProperties props = new AppProperties("http://localhost:8080", new AppProperties.Cache(Duration.ofHours(24)));
+        AppProperties props = new AppProperties("http://localhost:8080", new AppProperties.Cache(Duration.ofHours(24)),
+                new AppProperties.Stats(ZoneId.of("America/Sao_Paulo")));
         linkCache = new LinkCache(redis, JsonMapper.builder().build(), props);
     }
 
