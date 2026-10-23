@@ -13,6 +13,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -43,6 +44,12 @@ class LinkControllerIntegrationTest {
     private StringRedisTemplate redis;
 
     private final List<String> createdCodes = new ArrayList<>();
+
+    @BeforeEach
+    void zerarRateLimit() {
+        // Os testes criam vários links pelo mesmo IP (127.0.0.1); sem isso, bateriam no limite de 10/min.
+        redis.delete("ratelimit:create:127.0.0.1");
+    }
 
     @AfterEach
     void limparCache() {

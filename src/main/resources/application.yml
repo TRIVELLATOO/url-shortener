@@ -38,6 +38,10 @@ app:
   stats:
     # Fuso usado para decidir em que "dia" cada clique caiu nas estatísticas.
     zone: ${STATS_ZONE:America/Sao_Paulo}
+  rate-limit:
+    # Quantos links um mesmo IP pode criar por janela de tempo.
+    max-creations: ${RATE_LIMIT_MAX_CREATIONS:10}
+    window: ${RATE_LIMIT_WINDOW:1m}
 
 logging:
   level:

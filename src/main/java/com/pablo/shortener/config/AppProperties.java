@@ -3,6 +3,7 @@ package com.pablo.shortener.config;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import java.time.Duration;
 import java.time.ZoneId;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -11,7 +12,11 @@ import org.springframework.validation.annotation.Validated;
 /** Configurações próprias da aplicação, lidas do prefixo "app" no application.yml. */
 @Validated
 @ConfigurationProperties(prefix = "app")
-public record AppProperties(@NotBlank String baseUrl, @NotNull @Valid Cache cache, @NotNull @Valid Stats stats) {
+public record AppProperties(
+        @NotBlank String baseUrl,
+        @NotNull @Valid Cache cache,
+        @NotNull @Valid Stats stats,
+        @NotNull @Valid RateLimit rateLimit) {
 
     public AppProperties {
         // Remove a barra final para não gerar "http://localhost:8080//abc".
@@ -26,5 +31,9 @@ public record AppProperties(@NotBlank String baseUrl, @NotNull @Valid Cache cach
 
     /** "app.stats.zone: America/Sao_Paulo" vira um ZoneId. */
     public record Stats(@NotNull ZoneId zone) {
+    }
+
+    /** Limite de criação de links por IP: no máximo "maxCreations" a cada "window". */
+    public record RateLimit(@Positive int maxCreations, @NotNull Duration window) {
     }
 }
