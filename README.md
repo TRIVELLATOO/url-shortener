@@ -4,6 +4,14 @@ Encurtador de URLs feito com **Spring Boot 4**, **PostgreSQL** e **Redis**: cria
 
 Projeto de portfólio, construído em etapas, com foco em decisões técnicas explicáveis e testes automatizados.
 
+**🔗 Projeto no ar:** https://url-shortener-6zvr.onrender.com
+
+**📖 Documentação da API (Swagger):** https://url-shortener-6zvr.onrender.com/swagger-ui.html
+
+> ⏳ **O primeiro acesso pode levar cerca de 1 minuto.** O projeto está no plano gratuito do Render, que "coloca o serviço para dormir" depois de um tempo sem acessos. A primeira visita acorda o serviço; depois disso, as respostas são rápidas.
+
+![Demonstração: encurtando um link, copiando e vendo as estatísticas](docs/demo.gif)
+
 ## Funcionalidades
 
 - **Encurtar URLs:** `POST /api/links` devolve um código curto em Base62 (ex.: `6LAzf`).
@@ -278,7 +286,7 @@ O timeout do Redis é curto (500ms) para não travar as requisições.
 - **Janela fixa no rate limit:** na virada da janela, um IP consegue fazer até 2× o limite em poucos segundos. Uma janela deslizante (*sliding window*) ou um *token bucket* resolveria.
 - **Depende da plataforma para o IP real:** o `CF-Connecting-IP` só é confiável enquanto a aplicação estiver acessível apenas pela Cloudflare. Em outra plataforma, é preciso revisar `CLIENT_IP_HEADER` (ou configurar `server.tomcat.remoteip.internal-proxies` com os IPs do proxy). Com `RATE_LIMIT_LOG_LEVEL=debug`, o log mostra qual IP está sendo usado.
 - **IPv6:** cada cliente IPv6 costuma ter um bloco enorme de endereços (um /64), e pode trocar de IP para contornar o limite. Uma melhoria seria agrupar os IPv6 pelo prefixo /64.
-- **Plano gratuito do Render:** o serviço "dorme" depois de um tempo sem acessos, e o primeiro acesso depois disso demora alguns segundos para acordar.
+- **Plano gratuito do Render:** o serviço "dorme" depois de um tempo sem acessos, e o primeiro acesso depois disso pode levar cerca de 1 minuto para acordar.
 - **Estatísticas sem autenticação:** qualquer pessoa que souber o código pode ver as estatísticas do link.
 - **Testes usam o banco de desenvolvimento:** os testes de integração rodam no PostgreSQL e no Redis do Docker Compose. Com Testcontainers, cada execução teria containers descartáveis.
 - **Sem expiração de links:** os links são permanentes.
