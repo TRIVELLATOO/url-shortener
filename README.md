@@ -8,9 +8,9 @@ Projeto de portfólio, construído em etapas, com foco em decisões técnicas ex
 
 **📖 Documentação da API (Swagger):** https://url-shortener-6zvr.onrender.com/swagger-ui.html
 
-> ⏳ **O primeiro acesso pode levar cerca de 1 minuto.** O projeto está no plano gratuito do Render, que "coloca o serviço para dormir" depois de um tempo sem acessos. A primeira visita acorda o serviço; depois disso, as respostas são rápidas.
-
 ![Demonstração: encurtando um link, copiando e vendo as estatísticas](docs/demo.gif)
+
+> ⏳ **O primeiro acesso pode levar cerca de 1 minuto.** O projeto está no plano gratuito do Render, que "coloca o serviço para dormir" depois de um tempo sem acessos. A primeira visita acorda o serviço; depois disso, as respostas são rápidas.
 
 ## Funcionalidades
 
