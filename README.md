@@ -309,4 +309,4 @@ src/main/resources/
 
 
 Projeto desenvolvido por Pablo Trivellato, estudante de Engenharia de Software na PUCPR.
-Contato: github.com/TRIVELLATOO
+Contato: github.com/TRIVELLATOO (veja meus outros projetos)
