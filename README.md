@@ -306,3 +306,6 @@ src/main/resources/
     ├── index.html                  # página para encurtar links
     └── stats.html                  # página de estatísticas com gráfico
 ```
+
+
+Projeto desenvolvido por Pablo Trivellato, estudante de Engenharia de Software na PUCPR.
